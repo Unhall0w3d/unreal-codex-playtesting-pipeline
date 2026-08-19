@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+
+# Capture one newly-created rendered window on Hyprland 0.55+ without changing
+# the caller's active workspace. This is a reference adapter, not a game
+# protocol: the game must write the requested readiness marker to stdout/stderr.
+
+usage() {
+  cat >&2 <<'USAGE'
+Usage: capture-hyprland-window.sh.example \
+  --editor /path/to/game-launcher \
+  --project /path/to/Game.uproject \
+  --output /path/to/capture.png \
+  --workspace 3 \
+  --ready-marker READY_MARKER \
+  [--timeout-seconds 120] [--window-regex REGEX] [-- extra game arguments]
+
+The target workspace must already be visible on a dedicated monitor/workspace.
+USAGE
+  exit 2
+}
+
+editor=""
+project=""
+output=""
+workspace=""
+ready_marker=""
+timeout_seconds=120
+window_regex=""
+extra_args=()
+
+while (($#)); do
+  case "$1" in
+    --editor) [[ $# -ge 2 ]] || usage; editor=$2; shift 2 ;;
+    --project) [[ $# -ge 2 ]] || usage; project=$2; shift 2 ;;
+    --output) [[ $# -ge 2 ]] || usage; output=$2; shift 2 ;;
+    --workspace) [[ $# -ge 2 ]] || usage; workspace=$2; shift 2 ;;
+    --ready-marker) [[ $# -ge 2 ]] || usage; ready_marker=$2; shift 2 ;;
+    --timeout-seconds) [[ $# -ge 2 ]] || usage; timeout_seconds=$2; shift 2 ;;
+    --window-regex) [[ $# -ge 2 ]] || usage; window_regex=$2; shift 2 ;;
+    --) shift; extra_args+=("$@"); break ;;
+    -h|--help) usage ;;
+    *) echo "Unknown argument: $1" >&2; usage ;;
+  esac
+done
+
+[[ -n "$editor" && -x "$editor" ]] || { echo "--editor must name an executable" >&2; exit 2; }
+[[ -f "$project" ]] || { echo "--project must name an existing project file" >&2; exit 2; }
+[[ -n "$output" ]] || { echo "--output is required" >&2; exit 2; }
+[[ "$workspace" =~ ^[0-9]+$ ]] || { echo "--workspace must be a numeric Hyprland workspace" >&2; exit 2; }
+[[ -n "$ready_marker" ]] || { echo "--ready-marker is required" >&2; exit 2; }
+[[ "$timeout_seconds" =~ ^[1-9][0-9]*$ ]] || { echo "--timeout-seconds must be a positive integer" >&2; exit 2; }
+
+command -v hyprctl >/dev/null || { echo "hyprctl is required" >&2; exit 1; }
+command -v jq >/dev/null || { echo "jq is required" >&2; exit 1; }
+command -v grim >/dev/null || { echo "grim is required" >&2; exit 1; }
+
+output_dir="$(dirname -- "$output")"
+mkdir -p -- "$output_dir"
+log_path="$output_dir/capture.log"
+
+clients_json() { hyprctl clients -j; }
+addresses() { clients_json | jq -r '.[].address' | sort; }
+
+before_addresses="$(addresses)"
+editor_pid=""
+
+cleanup() {
+  local status=$?
+  trap - EXIT INT TERM
+  if [[ -n "$editor_pid" ]] && kill -0 "$editor_pid" 2>/dev/null; then
+    kill "$editor_pid" 2>/dev/null || true
+    wait "$editor_pid" 2>/dev/null || true
+  fi
+  exit "$status"
+}
+trap cleanup EXIT INT TERM
+
+"$editor" "$project" "${extra_args[@]}" >"$log_path" 2>&1 &
+editor_pid=$!
+
+deadline=$((SECONDS + timeout_seconds))
+new_address=""
+while ((SECONDS < deadline)); do
+  if grep -Fq -- "$ready_marker" "$log_path" 2>/dev/null; then
+    mapfile -t candidates < <(comm -23 <(addresses) <(printf '%s\n' "$before_addresses" | sort))
+    if [[ -n "$window_regex" ]]; then
+      mapfile -t candidates < <(
+        clients_json | jq -r --argjson candidates "$(printf '%s\n' "${candidates[@]}" | jq -R -s 'split("\n") | map(select(length > 0))')" \
+          --arg pattern "$window_regex" \
+          '.[] | select(.address as $a | ($candidates | index($a))) | select((.class + " " + .title) | test($pattern)) | .address'
+      )
+    fi
+    if ((${#candidates[@]} == 1)); then
+      new_address=${candidates[0]}
+      break
+    fi
+  fi
+  sleep 0.2
+done
+
+[[ -n "$new_address" ]] || {
+  echo "Timed out waiting for one new window with readiness marker: $ready_marker" >&2
+  exit 1
+}
+
+# Hyprland 0.55+ exposes Lua dispatch through eval. follow=false keeps the
+# user's active workspace unchanged; the capture workspace must be visible.
+hyprctl eval "hl.dispatch(hl.dsp.window.move({ workspace = \"$workspace\", follow = false, window = \"address:$new_address\" }))" >/dev/null
+
+geometry=""
+while ((SECONDS < deadline)); do
+  geometry="$(clients_json | jq -r --arg address "$new_address" \
+    '.[] | select(.address == $address) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"' | head -n 1)"
+  [[ -n "$geometry" ]] && break
+  sleep 0.2
+done
+
+read -r x y width height <<<"$geometry"
+[[ "$x" =~ ^-?[0-9]+$ && "$y" =~ ^-?[0-9]+$ && "$width" =~ ^[1-9][0-9]*$ && "$height" =~ ^[1-9][0-9]*$ ]] || {
+  echo "Could not resolve a valid geometry for window address $new_address" >&2
+  exit 1
+}
+
+grim -g "${x},${y} ${width}x${height}" "$output"
+[[ -s "$output" ]] || { echo "Capture is empty: $output" >&2; exit 1; }
+echo "Captured $output from window address $new_address (${width}x${height})"

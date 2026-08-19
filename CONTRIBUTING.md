@@ -13,6 +13,9 @@ Minimum expectations:
    relevant Unreal build/package matrix.
 5. Include exact commands and evidence in change descriptions.
 6. Keep machine-qualified behavior separate from human-approved feel/visuals.
+7. Keep local-worker contracts provider-neutral and capability-declared; do
+   not make one model family, runtime, device, or private orchestrator a public
+   requirement.
 
 Please explain the security boundary affected by a change, include the
 commands you ran, and avoid adding real project assets or credentials. Changes

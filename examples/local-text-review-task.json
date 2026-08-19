@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "task_id": "example.text-review.001",
+  "task_type": "text_review",
+  "required_capabilities": ["input.text", "output.closed_json", "review.text"],
+  "objective": "Review the supplied state report against the declared runtime policy.",
+  "goalposts": [
+    {
+      "id": "health",
+      "requirement": "The game reached ready state and reported no fatal error."
+    },
+    {
+      "id": "authority",
+      "requirement": "The local review worker remained evidence-only and performed no mutation."
+    }
+  ],
+  "known_non_goals": [
+    "Do not infer visual quality from text evidence."
+  ],
+  "text_evidence": [
+    {
+      "id": "sample-state",
+      "path": "evidence/sample-state.txt",
+      "caption": "Synthetic clean-room protocol example"
+    }
+  ]
+}

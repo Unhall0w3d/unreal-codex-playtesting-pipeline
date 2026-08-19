@@ -39,6 +39,19 @@ repeatability, movement deltas, state transitions, and capture availability. It
 cannot prove that combat feels good, animation looks natural, controls are
 accessible, or a game is fun.
 
+There are two different kinds of evidence. Structural assertions come from the
+game-owned state contract: transforms, resources, transitions, and timing. A
+rendered PNG is pixel evidence for composition, materials, lighting, UI, and
+obvious regressions. Neither replaces the other, and visual approval remains a
+human decision.
+
+A third optional layer is a local review worker. It may classify already
+captured evidence or, in a future bounded journey loop, propose one action from
+a closed game-owned catalog. It is not a Codex-native subagent and does not
+receive repository, shell, Git, or mutation authority. The public boundary is
+the provider-neutral task/result protocol in `docs/local-model-workers.md`, not
+Qwen or any other particular model family.
+
 ## Architecture
 
 ```mermaid
@@ -238,6 +251,27 @@ dodge distance/recovery, damage/guard/defeat/respawn, cooldowns/costs, enemy
 defeat, loot, and deterministic reset. Rendered journeys can capture idle,
 diagonal sprint, attacks, environment vistas, and UI states.
 
+### Deterministic rendered capture on Hyprland
+
+For Linux desktop runs, `scripts/capture-hyprland-window.sh.example` is a
+small, generic adapter. The caller supplies the editor/launcher executable,
+project file, output image, numeric target workspace, and a readiness marker.
+The helper records existing Hyprland client addresses, starts the child, waits
+with a bounded deadline for the marker, and computes the exact new-window
+address by set difference. It moves that client with Hyprland 0.55+'s Lua
+`hyprctl eval` interface using `follow = false`, reads its current geometry,
+and captures only that rectangle with `grim`. A direct-child cleanup trap runs
+on success, failure, interrupt, or timeout.
+
+The target workspace must already be visible on a dedicated monitor/workspace;
+the helper intentionally does not switch the user's active workspace. If a
+launcher creates more than one new client, provide `--window-regex` or fail
+closed rather than guessing. Captures and logs belong in an ignored run
+directory and must be manually checked for private UI, paths, notifications,
+and account data before they are retained or published. This adapter is a
+desktop capture aid, not a replacement for semantic assertions or human visual
+approval.
+
 `-nullrhi` is appropriate for logic smoke tests but is not graphics-performance
 evidence. Measure frame time and visuals only from rendered runs. Introduce
 image comparison after camera, lighting, resolution, and checkpoints are stable.
@@ -253,8 +287,11 @@ Collect evidence for:
 - MCP initialize, discovery, calls, and session cleanup;
 - exact packaged-build numeric smoke assertions;
 - offscreen rendered PNG capture;
+- deterministic visible-window capture with a new-client address diff;
 - signal, failure, timeout, and normal-exit cleanup;
 - port ownership and stale-listener rejection;
+- local-worker malformed-output, false-positive, false-negative, latency,
+  provenance, and concurrent-resource behavior before qualifying any task; and
 - human review of controls, feel, animation, accessibility, and art.
 
 The original case study passed all build/package stages, negotiated MCP protocol

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "task_id": "example.environment-review.001",
+  "task_type": "visual_review",
+  "required_capabilities": ["input.text", "input.image", "output.closed_json", "review.visual"],
+  "objective": "Review the supplied deterministic captures for obvious visual regressions.",
+  "goalposts": [
+    {"id": "materials", "requirement": "No fallback, missing, or uniformly magenta material is visible."},
+    {"id": "continuity", "requirement": "No obvious terrain crack, clipping seam, or floating prop is visible."}
+  ],
+  "known_non_goals": [
+    "Do not judge final art quality from a diagnostic material pass."
+  ],
+  "images": [
+    {"id": "view-a", "path": "captures/view-a.png", "caption": "Fixed camera A"}
+  ]
+}
