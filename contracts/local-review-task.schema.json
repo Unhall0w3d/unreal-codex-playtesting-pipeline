@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/unreal-codex/local-review-task.schema.json",
+  "title": "Local evidence review task",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "task_id", "task_type", "required_capabilities", "objective", "goalposts"],
+  "anyOf": [
+    {"required": ["images"]},
+    {"required": ["text_evidence"]}
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "task_id": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,96}$"},
+    "task_type": {"enum": ["text_review", "visual_review"]},
+    "required_capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{0,63}$"}
+    },
+    "objective": {"type": "string", "minLength": 1, "maxLength": 2000},
+    "goalposts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "requirement"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$"},
+          "requirement": {"type": "string", "minLength": 1, "maxLength": 1000}
+        }
+      }
+    },
+    "known_non_goals": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {"type": "string", "minLength": 1, "maxLength": 500}
+    },
+    "images": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "path"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$"},
+          "path": {"type": "string", "minLength": 1, "maxLength": 512},
+          "caption": {"type": "string", "maxLength": 500}
+        }
+      }
+    },
+    "text_evidence": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "path"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$"},
+          "path": {"type": "string", "minLength": 1, "maxLength": 512},
+          "caption": {"type": "string", "maxLength": 500}
+        }
+      }
+    }
+  }
+}

@@ -12,6 +12,8 @@
       verified with a reviewed checksum or stronger provenance mechanism.
 - [ ] Generated logs and captures are ignored; sample evidence is manually
       reviewed for private UI, paths, player names, and notifications.
+- [ ] Desktop capture examples use caller-supplied paths and markers; no home
+      directory, account, workspace, or project defaults are embedded.
 
 ## Runtime boundary
 
@@ -37,6 +39,20 @@
 - [ ] EXIT, INT, and TERM cleanup kills and waits for every owned child.
 - [ ] Cleanup proves no child or listener survived.
 - [ ] Each run has a unique evidence directory and a machine-readable result.
+- [ ] A rendered capture targets a newly-created client by exact Hyprland
+      address diff, uses a bounded wait, and cleans up the owned child.
+- [ ] The capture workspace is visible and dedicated; `follow = false` avoids
+      changing the user's active workspace.
+- [ ] Pixel captures are treated as evidence for manual visual review, not as a
+      substitute for authoritative structural assertions.
+- [ ] Local-model workers receive only explicit manifests and allowlisted
+      evidence, never repository discovery, shell, Git, or mutation tools.
+- [ ] Worker endpoints are exact numeric loopback HTTP addresses; task,
+      evidence, response, timeout, and step budgets fail closed.
+- [ ] Model/runtime/device capabilities are recorded and requalified after any
+      relevant artifact, prompt, driver, game, schema, or hardware change.
+- [ ] Screenshot text is treated as untrusted evidence rather than worker
+      instructions, and candidate findings never trigger automatic repair.
 
 ## Before release
 

@@ -49,9 +49,33 @@ its current terms and attribution requirements.
 Codex is not bundled. Users obtain and configure it separately under OpenAI's
 applicable terms.
 
+## Desktop capture prerequisites
+
+The optional `scripts/capture-hyprland-window.sh.example` invokes software
+already installed by the user; it does not redistribute or vendor these tools:
+
+- [Hyprland](https://hyprland.org/) and its [`hyprctl` Lua/eval interface](https://wiki.hypr.land/Configuring/Advanced-and-Cool/Using-hyprctl/)
+- [`jq`](https://jqlang.org/)
+- [`grim`](https://gitlab.freedesktop.org/emersion/grim)
+
+Check each project's current license, package provenance, and compatibility
+before installing. The example contains no source or binaries from them.
+
+## Optional local-model runtimes
+
+The local-review worker does not bundle a model or inference runtime. It may be
+connected to software obtained separately by the user, including:
+
+- [llama.cpp](https://github.com/ggml-org/llama.cpp), whose upstream repository
+  reports the MIT License; and
+- [Qwen](https://github.com/QwenLM), whose individual model and code artifacts
+  must be checked for their exact license before download or redistribution.
+
+The protocol does not require either project. Record the model artifact,
+runtime version, applicable license, and provenance in each deployment.
+
 ## Repository license
 
-No license is selected by this package. Before public release, the repository
-owner must choose a license for the original documentation, scripts, sample
-provider, and fixture. Do not imply that Apache-2.0 automatically applies to
-new original work merely because the referenced upstream projects use it.
+The original material in this repository is licensed under Apache License 2.0,
+as recorded in [LICENSE-DECISION.md](LICENSE-DECISION.md). That selection does
+not change or supersede any third-party license.
