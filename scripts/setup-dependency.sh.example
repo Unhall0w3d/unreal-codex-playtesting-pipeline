@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Copy this file once per external release artifact. Supply reviewed values;
+# placeholders intentionally prevent an accidental unverified installation.
+artifact_url="${ARTIFACT_URL:?Set ARTIFACT_URL to a reviewed HTTPS release asset}"
+archive_sha256="${ARCHIVE_SHA256:?Set ARCHIVE_SHA256}"
+binary_sha256="${BINARY_SHA256:?Set BINARY_SHA256}"
+install_dir="${INSTALL_DIR:?Set INSTALL_DIR inside the project ignored tree}"
+binary_relative_path="${BINARY_RELATIVE_PATH:?Set BINARY_RELATIVE_PATH}"
+
+if [[ "$artifact_url" != https://* ]]; then
+  echo "ARTIFACT_URL must use HTTPS" >&2
+  exit 1
+fi
+
+installed_bin="$install_dir/$binary_relative_path"
+if [[ -x "$installed_bin" ]]; then
+  actual="$(sha256sum "$installed_bin" | awk '{print $1}')"
+  if [[ "$actual" == "$binary_sha256" ]]; then
+    echo "Verified existing install: $installed_bin"
+    exit 0
+  fi
+  echo "Existing executable checksum mismatch; refusing reuse" >&2
+  exit 1
+fi
+
+temp_dir="$(mktemp -d)"
+trap 'rm -rf -- "$temp_dir"' EXIT
+archive="$temp_dir/artifact.zip"
+staging="$temp_dir/staging"
+mkdir -p "$staging"
+
+curl --fail --location --proto '=https' --tlsv1.2 \
+  --output "$archive" "$artifact_url"
+printf '%s  %s\n' "$archive_sha256" "$archive" | sha256sum --check --strict
+unzip -q "$archive" -d "$staging"
+
+candidate="$staging/$binary_relative_path"
+if [[ ! -f "$candidate" ]]; then
+  echo "Expected binary not found in archive: $binary_relative_path" >&2
+  exit 1
+fi
+printf '%s  %s\n' "$binary_sha256" "$candidate" | sha256sum --check --strict
+
+mkdir -p "$(dirname -- "$installed_bin")"
+install -m 0755 "$candidate" "$installed_bin"
+printf '%s  %s\n' "$binary_sha256" "$installed_bin" | sha256sum --check --strict

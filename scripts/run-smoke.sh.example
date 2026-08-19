@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+server_bin="${GAMEDEV_MCP_SERVER_BIN:?Set GAMEDEV_MCP_SERVER_BIN}"
+game_bin="${GAME_PACKAGE_PATH:?Set GAME_PACKAGE_PATH to a Development package}"
+driver="${MCP_DRIVER_PATH:?Set MCP_DRIVER_PATH}"
+server_port="${GAMEDEV_MCP_SMOKE_PORT:-18080}"
+run_root="${AUTOMATION_RESULTS_ROOT:-./Saved/Automation}"
+run_id="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+run_dir="$run_root/$run_id"
+mkdir -p "$run_dir"
+
+server_pid=""
+game_pid=""
+cleanup() {
+  local status=$?
+  trap - EXIT INT TERM
+  if [[ -n "$game_pid" ]] && kill -0 "$game_pid" 2>/dev/null; then
+    kill "$game_pid" 2>/dev/null || true
+    wait "$game_pid" 2>/dev/null || true
+  fi
+  if [[ -n "$server_pid" ]] && kill -0 "$server_pid" 2>/dev/null; then
+    kill "$server_pid" 2>/dev/null || true
+    wait "$server_pid" 2>/dev/null || true
+  fi
+  exit "$status"
+}
+trap cleanup EXIT INT TERM
+
+[[ -x "$server_bin" ]] || { echo "Server is not executable" >&2; exit 1; }
+[[ -x "$game_bin" ]] || { echo "Development game package is missing" >&2; exit 1; }
+[[ -f "$driver" ]] || { echo "MCP driver is missing" >&2; exit 1; }
+
+MCP_BIND=loopback MCP_AUTH=none "$server_bin" \
+  --port "$server_port" --client-transport streamableHttp --auth none \
+  >"$run_dir/server.log" 2>&1 &
+server_pid=$!
+
+# Replace this sleep with an identity-bearing readiness probe that proves the
+# newly started PID owns the expected listener.
+sleep 1
+kill -0 "$server_pid"
+
+"$game_bin" -GameAutomation \
+  -GameAutomationHost="http://127.0.0.1:$server_port" \
+  -unattended -nosound -nullrhi >"$run_dir/game.log" 2>&1 &
+game_pid=$!
+
+# A caller or CI job should also wrap this entire script in a wall-clock timeout.
+timeout 90s python3 "$driver" --url "http://127.0.0.1:$server_port/mcp" \
+  smoke >"$run_dir/result.json"

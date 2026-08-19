@@ -1,0 +1,24 @@
+# Unreal generated content
+Binaries/
+Builds/
+DerivedDataCache/
+Intermediate/
+Saved/
+
+# Local dependencies and test evidence
+vendor/
+Automation/vendor/
+Automation/results/
+*.log
+*.png
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+*.token
+*.credentials

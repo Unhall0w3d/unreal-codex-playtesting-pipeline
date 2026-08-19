@@ -1,0 +1,26 @@
+# Copy the relevant section into the project's .codex/config.toml.
+# Replace the path and review every approval mode before enabling the server.
+
+[mcp_servers.unreal_game]
+command = "/usr/bin/bash"
+args = ["Automation/mcp-server.sh"]
+cwd = "/path/to/game-project"
+startup_timeout_sec = 120
+tool_timeout_sec = 30
+enabled = true
+required = false
+default_tools_approval_mode = "writes"
+
+[mcp_servers.unreal_game.tools.game-move]
+approval_mode = "auto"
+
+[mcp_servers.unreal_game.tools.game-action]
+approval_mode = "auto"
+
+[mcp_servers.unreal_game.tools.game-look]
+approval_mode = "auto"
+
+[mcp_servers.unreal_game.tools.game-capture-request]
+approval_mode = "auto"
+
+# Keep game-damage-player and game-reset under the default write policy.

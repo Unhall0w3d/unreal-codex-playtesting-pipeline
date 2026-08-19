@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+server_bin="${GAMEDEV_MCP_SERVER_BIN:-$script_dir/vendor/gamedev-mcp-server}"
+server_port="${GAMEDEV_MCP_PORT:-8080}"
+
+if [[ ! -x "$server_bin" ]]; then
+  echo "Missing executable: $server_bin" >&2
+  echo "Install and verify the pinned server before starting Codex." >&2
+  exit 1
+fi
+
+# Pin both values here so inherited environment cannot expose an
+# unauthenticated remote-control surface.
+MCP_BIND=loopback MCP_AUTH=none exec "$server_bin" \
+  --port "$server_port" \
+  --client-transport stdio \
+  --auth none \
+  --idle-timeout-seconds 21600
