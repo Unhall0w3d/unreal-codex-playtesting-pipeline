@@ -43,6 +43,13 @@
       address diff, uses a bounded wait, and cleans up the owned child.
 - [ ] The capture workspace is visible and dedicated; `follow = false` avoids
       changing the user's active workspace.
+- [ ] Any temporary map-time window rule is narrowly matched, installed before
+      launch, verified against the mapped workspace, and disabled in cleanup.
+- [ ] Automation-only game launches suppress splash/input capture without
+      changing the normal interactive input policy.
+- [ ] Readiness, client discovery, rendered capture, and child cleanup all have
+      explicit independent bounds; a stalled compositor capture cannot leave
+      the owned game process running indefinitely.
 - [ ] Pixel captures are treated as evidence for manual visual review, not as a
       substitute for authoritative structural assertions.
 - [ ] Local-model workers receive only explicit manifests and allowlisted

@@ -258,10 +258,20 @@ small, generic adapter. The caller supplies the editor/launcher executable,
 project file, output image, numeric target workspace, and a readiness marker.
 The helper records existing Hyprland client addresses, starts the child, waits
 with a bounded deadline for the marker, and computes the exact new-window
-address by set difference. It moves that client with Hyprland 0.55+'s Lua
-`hyprctl eval` interface using `follow = false`, reads its current geometry,
-and captures only that rectangle with `grim`. A direct-child cleanup trap runs
-on success, failure, interrupt, or timeout.
+address by set difference. On Hyprland 0.56+, callers should provide a narrow
+`--initial-class-regex`. The helper installs a named runtime window rule before
+launch, with the target workspace/monitor and `no_initial_focus`; this places a
+splash client and any replacement game client correctly at map time instead of
+moving them after a frame has already appeared on the focused desktop. The
+rule is disabled by the cleanup trap. Without that option, the older
+`follow = false` post-map move remains a compatibility fallback.
+
+After readiness, the helper verifies the client's actual workspace, reads its
+geometry, and captures only that rectangle with `grim` under a separate hard
+timeout. A direct-child cleanup trap runs on success, failure, interrupt, or
+timeout. Every run uses a PID-scoped log so a delayed prior shutdown cannot
+race the next readiness probe; logs are searched as binary-safe text because
+some native engine logs contain NUL bytes.
 
 The target workspace must already be visible on a dedicated monitor/workspace;
 the helper intentionally does not switch the user's active workspace. If a
@@ -271,6 +281,16 @@ directory and must be manually checked for private UI, paths, notifications,
 and account data before they are retained or published. This adapter is a
 desktop capture aid, not a replacement for semantic assertions or human visual
 approval.
+
+Window-manager focus suppression does not prevent a game viewport from
+capturing or locking the pointer after initialization. For unattended Unreal
+runs, also pass `-NoSplash` and
+`-DefaultViewportMouseCaptureMode=NoCapture`. When readiness is read from
+redirected process output, pass `-stdout -FullStdOutLogOutput` so Unreal writes
+and flushes the marker as it occurs rather than at shutdown. Gate a game-side
+Development-only release of mouse capture/lock behind the explicit automation
+argument. Do not change the normal interactive input defaults globally merely
+to accommodate a capture worker.
 
 `-nullrhi` is appropriate for logic smoke tests but is not graphics-performance
 evidence. Measure frame time and visuals only from rendered runs. Introduce
