@@ -45,6 +45,8 @@
       changing the user's active workspace.
 - [ ] Any temporary map-time window rule is narrowly matched, installed before
       launch, verified against the mapped workspace, and disabled in cleanup.
+- [ ] Newly created capture clients are forbidden from taking focus; any focus
+      theft restores the prior window and cursor and fails the run.
 - [ ] Automation-only game launches suppress splash/input capture without
       changing the normal interactive input policy.
 - [ ] Readiness, client discovery, rendered capture, and child cleanup all have

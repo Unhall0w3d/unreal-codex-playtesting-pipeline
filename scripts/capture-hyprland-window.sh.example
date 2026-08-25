@@ -80,9 +80,26 @@ clients_json() { hyprctl clients -j; }
 addresses() { clients_json | jq -r '.[].address' | sort; }
 
 before_addresses="$(addresses)"
+initial_active_address="$(hyprctl activewindow -j | jq -r '.address // empty')"
+initial_cursor_x="$(hyprctl cursorpos -j | jq -r '.x')"
+initial_cursor_y="$(hyprctl cursorpos -j | jq -r '.y')"
 editor_pid=""
 capture_rule_name="capture-window-$$"
 capture_rule_armed=""
+
+new_client_has_focus() {
+  local active_address
+  active_address="$(hyprctl activewindow -j | jq -r '.address // empty')"
+  [[ -n "$active_address" && "$active_address" != "$initial_active_address" ]] || return 1
+  ! grep -Fxq -- "$active_address" <<<"$before_addresses"
+}
+
+restore_after_focus_theft() {
+  if [[ -n "$initial_active_address" ]]; then
+    hyprctl dispatch focuswindow "address:$initial_active_address" >/dev/null 2>&1 || true
+  fi
+  hyprctl dispatch movecursor "$initial_cursor_x" "$initial_cursor_y" >/dev/null 2>&1 || true
+}
 
 cleanup() {
   local status=$?
@@ -119,7 +136,7 @@ if [[ -n "$initial_class_regex" ]]; then
   if [[ -n "$initial_title_regex" ]]; then
     title_match=", initial_title = [[$initial_title_regex]]"
   fi
-  hyprctl eval "local r = hl.window_rule({ name = [[$capture_rule_name]], enabled = true, match = { initial_class = [[$initial_class_regex]]$title_match }, workspace = [[$workspace]], monitor = [[$target_monitor]], no_initial_focus = true }); r:set_enabled(true)" >/dev/null
+  hyprctl eval "local r = hl.window_rule({ name = [[$capture_rule_name]], enabled = true, match = { initial_class = [[$initial_class_regex]]$title_match }, workspace = [[$workspace]], monitor = [[$target_monitor]], no_initial_focus = true, no_focus = true, focus_on_activate = false, no_follow_mouse = true }); r:set_enabled(true)" >/dev/null
   capture_rule_armed=1
 fi
 
@@ -129,6 +146,11 @@ editor_pid=$!
 deadline=$((SECONDS + timeout_seconds))
 new_address=""
 while ((SECONDS < deadline)); do
+  if new_client_has_focus; then
+    restore_after_focus_theft
+    echo "A newly-created client took focus; restored the prior window and cursor" >&2
+    exit 1
+  fi
   if grep -aFq -- "$ready_marker" "$log_path" 2>/dev/null; then
     mapfile -t candidates < <(comm -23 <(addresses) <(printf '%s\n' "$before_addresses" | sort))
     if [[ -n "$window_regex" ]]; then
@@ -177,6 +199,12 @@ initial_workspace="$(clients_json | jq -r --arg address "$new_address" \
   echo "Window mapped on workspace $initial_workspace, expected $workspace" >&2
   exit 1
 }
+
+if new_client_has_focus; then
+  restore_after_focus_theft
+  echo "The captured client took focus; restored the prior window and cursor" >&2
+  exit 1
+fi
 
 timeout --signal=TERM "$capture_timeout_seconds" \
   grim -g "${x},${y} ${width}x${height}" "$output"

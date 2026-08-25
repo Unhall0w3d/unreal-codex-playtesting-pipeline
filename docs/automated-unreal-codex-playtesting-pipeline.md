@@ -263,8 +263,11 @@ address by set difference. On Hyprland 0.56+, callers should provide a narrow
 launch, with the target workspace/monitor and `no_initial_focus`; this places a
 splash client and any replacement game client correctly at map time instead of
 moving them after a frame has already appeared on the focused desktop. The
-rule is disabled by the cleanup trap. Without that option, the older
-`follow = false` post-map move remains a compatibility fallback.
+rule additionally sets `no_focus`, disables focus-on-activate, and prevents
+follow-mouse focus. The adapter snapshots the active window and cursor before
+launch; if any newly created client still steals focus, it restores both and
+fails closed. The rule is disabled by the cleanup trap. Without that option,
+the older `follow = false` post-map move remains a compatibility fallback.
 
 After readiness, the helper verifies the client's actual workspace, reads its
 geometry, and captures only that rectangle with `grim` under a separate hard
@@ -291,6 +294,13 @@ and flushes the marker as it occurs rather than at shutdown. Gate a game-side
 Development-only release of mouse capture/lock behind the explicit automation
 argument. Do not change the normal interactive input defaults globally merely
 to accommodate a capture worker.
+
+Focus preservation is intentionally stricter than merely moving the window
+without `follow`: an unattended capture that activates a newly-created client
+is rejected even if the client was mapped on the correct workspace. This avoids
+leaving a game holding keyboard or pointer focus after a compositor or launcher
+behavior change. A user's deliberate switch among windows that existed before
+the run is not treated as automation focus theft.
 
 `-nullrhi` is appropriate for logic smoke tests but is not graphics-performance
 evidence. Measure frame time and visuals only from rendered runs. Introduce
