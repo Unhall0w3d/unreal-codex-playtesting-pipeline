@@ -50,8 +50,13 @@ current upstream releases, checksums, compatibility, and licenses before use.
 The Hyprland capture example is deliberately separate from semantic gameplay
 tests. It uses a readiness log marker and a new-window address diff to capture
 the exact rendered client geometry with `grim`; it does not inspect a DOM or
-pretend that a native game is a browser. Its target workspace must already be
-visible and dedicated, and the resulting image still requires manual review.
+pretend that a native game is a browser. On Hyprland 0.56+, its optional narrow
+initial-class rule places splash and replacement clients on a visible dedicated
+workspace at map time, forbids those clients from taking focus, and disables
+itself during cleanup. The adapter also detects unexpected focus theft, restores
+the prior window and cursor, and fails the run instead of silently disrupting
+the desktop. Render capture has its own hard timeout, and the resulting image
+still requires manual review.
 
 The local-worker extension is model-neutral. Qwen is one possible local
 implementation, not a pipeline dependency. Workers advertise capabilities and

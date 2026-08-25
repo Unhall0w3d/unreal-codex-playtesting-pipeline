@@ -14,9 +14,13 @@ Usage: capture-hyprland-window.sh.example \
   --output /path/to/capture.png \
   --workspace 3 \
   --ready-marker READY_MARKER \
-  [--timeout-seconds 120] [--window-regex REGEX] [-- extra game arguments]
+  [--timeout-seconds 120] [--capture-timeout-seconds 15] \
+  [--window-regex REGEX] [--initial-class-regex REGEX] \
+  [--initial-title-regex REGEX] [-- extra game arguments]
 
 The target workspace must already be visible on a dedicated monitor/workspace.
+On Hyprland 0.56+, --initial-class-regex enables temporary map-time placement
+so splash/replacement clients cannot flash on the caller's active workspace.
 USAGE
   exit 2
 }
@@ -27,7 +31,10 @@ output=""
 workspace=""
 ready_marker=""
 timeout_seconds=120
+capture_timeout_seconds=15
 window_regex=""
+initial_class_regex=""
+initial_title_regex=""
 extra_args=()
 
 while (($#)); do
@@ -38,7 +45,10 @@ while (($#)); do
     --workspace) [[ $# -ge 2 ]] || usage; workspace=$2; shift 2 ;;
     --ready-marker) [[ $# -ge 2 ]] || usage; ready_marker=$2; shift 2 ;;
     --timeout-seconds) [[ $# -ge 2 ]] || usage; timeout_seconds=$2; shift 2 ;;
+    --capture-timeout-seconds) [[ $# -ge 2 ]] || usage; capture_timeout_seconds=$2; shift 2 ;;
     --window-regex) [[ $# -ge 2 ]] || usage; window_regex=$2; shift 2 ;;
+    --initial-class-regex) [[ $# -ge 2 ]] || usage; initial_class_regex=$2; shift 2 ;;
+    --initial-title-regex) [[ $# -ge 2 ]] || usage; initial_title_regex=$2; shift 2 ;;
     --) shift; extra_args+=("$@"); break ;;
     -h|--help) usage ;;
     *) echo "Unknown argument: $1" >&2; usage ;;
@@ -51,31 +61,84 @@ done
 [[ "$workspace" =~ ^[0-9]+$ ]] || { echo "--workspace must be a numeric Hyprland workspace" >&2; exit 2; }
 [[ -n "$ready_marker" ]] || { echo "--ready-marker is required" >&2; exit 2; }
 [[ "$timeout_seconds" =~ ^[1-9][0-9]*$ ]] || { echo "--timeout-seconds must be a positive integer" >&2; exit 2; }
+[[ "$capture_timeout_seconds" =~ ^[1-9][0-9]*$ ]] || { echo "--capture-timeout-seconds must be a positive integer" >&2; exit 2; }
+[[ "$initial_class_regex" != *"]]"* && "$initial_title_regex" != *"]]"* ]] || {
+  echo "Initial window regexes must not contain the Lua long-string terminator ]]" >&2
+  exit 2
+}
 
 command -v hyprctl >/dev/null || { echo "hyprctl is required" >&2; exit 1; }
 command -v jq >/dev/null || { echo "jq is required" >&2; exit 1; }
 command -v grim >/dev/null || { echo "grim is required" >&2; exit 1; }
+command -v timeout >/dev/null || { echo "timeout is required" >&2; exit 1; }
 
 output_dir="$(dirname -- "$output")"
 mkdir -p -- "$output_dir"
-log_path="$output_dir/capture.log"
+log_path="$output_dir/capture-$$.log"
 
 clients_json() { hyprctl clients -j; }
 addresses() { clients_json | jq -r '.[].address' | sort; }
 
 before_addresses="$(addresses)"
+initial_active_address="$(hyprctl activewindow -j | jq -r '.address // empty')"
+initial_cursor_x="$(hyprctl cursorpos -j | jq -r '.x')"
+initial_cursor_y="$(hyprctl cursorpos -j | jq -r '.y')"
 editor_pid=""
+capture_rule_name="capture-window-$$"
+capture_rule_armed=""
+
+new_client_has_focus() {
+  local active_address
+  active_address="$(hyprctl activewindow -j | jq -r '.address // empty')"
+  [[ -n "$active_address" && "$active_address" != "$initial_active_address" ]] || return 1
+  ! grep -Fxq -- "$active_address" <<<"$before_addresses"
+}
+
+restore_after_focus_theft() {
+  if [[ -n "$initial_active_address" ]]; then
+    hyprctl dispatch focuswindow "address:$initial_active_address" >/dev/null 2>&1 || true
+  fi
+  hyprctl dispatch movecursor "$initial_cursor_x" "$initial_cursor_y" >/dev/null 2>&1 || true
+}
 
 cleanup() {
   local status=$?
   trap - EXIT INT TERM
   if [[ -n "$editor_pid" ]] && kill -0 "$editor_pid" 2>/dev/null; then
-    kill "$editor_pid" 2>/dev/null || true
+    kill -TERM "$editor_pid" 2>/dev/null || true
+    for _ in {1..40}; do
+      kill -0 "$editor_pid" 2>/dev/null || break
+      sleep 0.1
+    done
+    kill -KILL "$editor_pid" 2>/dev/null || true
     wait "$editor_pid" 2>/dev/null || true
+  fi
+  if [[ -n "$capture_rule_armed" ]]; then
+    hyprctl eval "local r = hl.window_rule({ name = [[$capture_rule_name]] }); r:set_enabled(false)" >/dev/null 2>&1 || true
   fi
   exit "$status"
 }
 trap cleanup EXIT INT TERM
+
+target_monitor="$(hyprctl workspaces -j | jq -r --arg workspace "$workspace" \
+  '.[] | select((.id | tostring) == $workspace) | .monitor' | head -n 1)"
+[[ -n "$target_monitor" ]] || {
+  echo "Workspace $workspace is not currently assigned to a visible monitor" >&2
+  exit 1
+}
+
+# Unreal and other native launchers may destroy a splash client and create a
+# replacement top-level window. Moving the first mapped client is too late: one
+# frame can flash on the focused workspace and the application may take input.
+# A temporary, narrowly matched rule places every matching client at map time.
+if [[ -n "$initial_class_regex" ]]; then
+  title_match=""
+  if [[ -n "$initial_title_regex" ]]; then
+    title_match=", initial_title = [[$initial_title_regex]]"
+  fi
+  hyprctl eval "local r = hl.window_rule({ name = [[$capture_rule_name]], enabled = true, match = { initial_class = [[$initial_class_regex]]$title_match }, workspace = [[$workspace]], monitor = [[$target_monitor]], no_initial_focus = true, no_focus = true, focus_on_activate = false, no_follow_mouse = true }); r:set_enabled(true)" >/dev/null
+  capture_rule_armed=1
+fi
 
 "$editor" "$project" "${extra_args[@]}" >"$log_path" 2>&1 &
 editor_pid=$!
@@ -83,7 +146,12 @@ editor_pid=$!
 deadline=$((SECONDS + timeout_seconds))
 new_address=""
 while ((SECONDS < deadline)); do
-  if grep -Fq -- "$ready_marker" "$log_path" 2>/dev/null; then
+  if new_client_has_focus; then
+    restore_after_focus_theft
+    echo "A newly-created client took focus; restored the prior window and cursor" >&2
+    exit 1
+  fi
+  if grep -aFq -- "$ready_marker" "$log_path" 2>/dev/null; then
     mapfile -t candidates < <(comm -23 <(addresses) <(printf '%s\n' "$before_addresses" | sort))
     if [[ -n "$window_regex" ]]; then
       mapfile -t candidates < <(
@@ -105,9 +173,11 @@ done
   exit 1
 }
 
-# Hyprland 0.55+ exposes Lua dispatch through eval. follow=false keeps the
-# user's active workspace unchanged; the capture workspace must be visible.
-hyprctl eval "hl.dispatch(hl.dsp.window.move({ workspace = \"$workspace\", follow = false, window = \"address:$new_address\" }))" >/dev/null
+# The map-time rule is preferred. This move is a fallback for Hyprland 0.55 or
+# callers that omit --initial-class-regex; follow=false preserves user focus.
+if [[ -z "$capture_rule_armed" ]]; then
+  hyprctl eval "hl.dispatch(hl.dsp.window.move({ workspace = \"$workspace\", follow = false, window = \"address:$new_address\" }))" >/dev/null
+fi
 
 geometry=""
 while ((SECONDS < deadline)); do
@@ -123,6 +193,20 @@ read -r x y width height <<<"$geometry"
   exit 1
 }
 
-grim -g "${x},${y} ${width}x${height}" "$output"
+initial_workspace="$(clients_json | jq -r --arg address "$new_address" \
+  '.[] | select(.address == $address) | .workspace.name' | head -n 1)"
+[[ "$initial_workspace" == "$workspace" ]] || {
+  echo "Window mapped on workspace $initial_workspace, expected $workspace" >&2
+  exit 1
+}
+
+if new_client_has_focus; then
+  restore_after_focus_theft
+  echo "The captured client took focus; restored the prior window and cursor" >&2
+  exit 1
+fi
+
+timeout --signal=TERM "$capture_timeout_seconds" \
+  grim -g "${x},${y} ${width}x${height}" "$output"
 [[ -s "$output" ]] || { echo "Capture is empty: $output" >&2; exit 1; }
 echo "Captured $output from window address $new_address (${width}x${height})"

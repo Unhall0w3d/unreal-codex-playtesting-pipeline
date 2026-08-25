@@ -12,6 +12,7 @@ git clone https://github.com/Unhall0w3d/unreal-codex-playtesting-pipeline.git
 cd unreal-codex-playtesting-pipeline
 python3 scripts/local-review-openai.py capabilities
 python3 -m unittest discover -s tests -v
+bash tests/test_capture_hyprland_window.sh
 sha256sum -c SHA256SUMS
 ```
 
